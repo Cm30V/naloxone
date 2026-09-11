@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { displayImageSrc } from "@/lib/image";
 import { formatDistance, haversineKm, mapsDirectionsUrl } from "@/lib/geo";
 import type { Location, RankedLocation } from "@/lib/types";
 import { MapPin } from "lucide-react";
@@ -289,13 +290,17 @@ export function FindBox({ locations }: Props) {
                     className="flex w-full shrink-0 snap-start flex-col px-4 py-3"
                   >
                     <Card className="flex min-h-0 flex-1 flex-col overflow-hidden py-0">
-                      <div className="relative aspect-[16/10] w-full bg-muted">
+                      <div className="relative aspect-[16/10] min-h-40 w-full shrink-0 bg-muted">
                         {loc.image_urls[0] ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            src={loc.image_urls[0]}
+                            src={displayImageSrc(loc.image_urls[0])}
                             alt=""
-                            className="h-full w-full object-cover"
+                            referrerPolicy="no-referrer"
+                            className="absolute inset-0 h-full w-full object-cover"
+                            onError={(event) => {
+                              event.currentTarget.style.display = "none";
+                            }}
                           />
                         ) : (
                           <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground">
