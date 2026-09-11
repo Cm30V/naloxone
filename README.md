@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Georgia Naloxone / Fentanyl Test Strip Locator (prototype)
 
-## Getting Started
+Mobile-and-desktop web app to find nearby Georgia naloxone distribution boxes and submit new ones. Built with Next.js (App Router), TypeScript, and Tailwind CSS for Vercel.
 
-First, run the development server:
+This is a **prototype**, not a production harm-reduction service.
+
+## Datastore
+
+- **Location records:** [Neon Postgres](https://neon.tech) via the Vercel Marketplace (`@neondatabase/serverless` + Drizzle). This replaces sunset **Vercel Postgres**.
+- **Uploaded photos:** [Vercel Blob](https://vercel.com/docs/vercel-blob). Do not store images as base64 in the database.
+- The CSV `georgia_naloxone_access_points.csv` is **seed data only**. Vercel’s filesystem is read-only at runtime, so new submissions are never written back to the CSV.
+
+CSV columns (confirmed from the file): `name`, `description`, `latitude`, `longitude`, `24/7`, `naloxone`, `fent_strips`, `type`, `image_url`. They map to `is_24_7`, `has_naloxone`, `has_fent_strips`, and `image_urls[]` in Postgres.
+
+## One-time setup
+
+1. Install the Vercel CLI and log in (`npx vercel login`).
+2. From this directory: `npx vercel link`.
+3. Provision Neon and connect it to the project:
+
+   ```bash
+   npx vercel integration add neon --yes --no-claim
+   ```
+
+   If the CLI needs a browser to accept terms or finish the install, complete that step, then continue.
+4. Create a Blob store and connect it to the project:
+
+   ```bash
+   npx vercel blob store add
+   ```
+
+5. Pull env vars locally:
+
+   ```bash
+   npx vercel env pull .env.local --yes
+   ```
+
+6. Push schema and seed from the CSV:
+
+   ```bash
+   npm install
+   npm run db:push
+   npm run db:seed
+   ```
+
+7. Run the app: `npm run dev`.
+
+Required environment variables are listed in `.env.example`:
+
+- `DATABASE_URL` — Neon connection string
+- `BLOB_READ_WRITE_TOKEN` — Vercel Blob write token
+
+## Deploy
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npx vercel deploy
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+After the first production deploy, run `db:push` and `db:seed` against the **production** `DATABASE_URL` as well (or use Neon’s SQL editor) so production is not an empty table.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## API
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `GET /api/locations` — all **approved** locations (seeded + user-submitted).
+- `POST /api/locations` — multipart form: `name`, `description`, `latitude`, `longitude`, `is_24_7`, `has_naloxone`, `has_fent_strips`, `type`, and up to 3 `images` files. Images go to Blob; the row is stored in Neon.
 
-## Learn More
+## Moderation (must revisit before a real launch)
 
-To learn more about Next.js, take a look at the following resources:
+User-submitted boxes are **auto-approved** so they show up immediately in Find a box. That is the simplest prototype behavior. Before any public launch, add review: bad actors could submit fake or harmful coordinates. There is **no admin dashboard** yet — that is a next step, along with accounts/auth.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Out of scope
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- User authentication
+- Admin moderation UI
+- In-app turn-by-turn routing (the app hands off to Apple Maps on iOS and Google Maps otherwise)
