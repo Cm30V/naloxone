@@ -16,7 +16,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type { Location } from "@/lib/types";
 
-const MAX_IMAGES = 3;
+const MAX_IMAGES = 1;
 const MAX_BYTES = 5 * 1024 * 1024;
 
 type Props = {
@@ -87,7 +87,7 @@ export function UploadBox({ locations, onCreated }: Props) {
     const next = Array.from(list ?? []);
     if (next.length > MAX_IMAGES) {
       setStatus("error");
-      setMessage("Choose up to 3 images.");
+      setMessage("Choose only 1 image.");
       return;
     }
     const oversized = next.find((f) => f.size > MAX_BYTES);
@@ -258,12 +258,11 @@ export function UploadBox({ locations, onCreated }: Props) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="images">Photos (up to 3, 5MB each)</Label>
+        <Label htmlFor="images">Photo (1 image, 5MB max)</Label>
         <Input
           id="images"
           type="file"
           accept="image/*"
-          multiple
           className="h-12 py-2 text-base"
           onChange={(e) => onFiles(e.target.files)}
         />

@@ -61,7 +61,7 @@ After the first production deploy, run `db:push` and `db:seed` against the **pro
 ## API
 
 - `GET /api/locations` — all **approved** locations (seeded + user-submitted).
-- `POST /api/locations` — multipart form: `name`, `description`, `latitude`, `longitude`, `is_24_7`, `has_naloxone`, `has_fent_strips`, `type`, and up to 3 `images` files. Images go to Blob; the row is stored in Neon.
+- `POST /api/locations` — multipart form: `name`, `description`, `latitude`, `longitude`, `is_24_7`, `has_naloxone`, `has_fent_strips`, `type`, and one optional `images` file. Images go to Blob; the row is stored in Neon.
 
 ## Moderation (must revisit before a real launch)
 

@@ -6,7 +6,7 @@ import { listApprovedLocations, toLocation } from "@/lib/locations";
 
 export const dynamic = "force-dynamic";
 
-const MAX_IMAGES = 3;
+const MAX_IMAGES = 1;
 const MAX_BYTES = 5 * 1024 * 1024;
 
 function parseYesNo(value: FormDataEntryValue | null, field: string) {
