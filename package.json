@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "db:push": "dotenv -e .env.local -- drizzle-kit push",
+    "db:migrate": "dotenv -e .env.local -- tsx scripts/migrate-admin.ts",
     "db:seed": "dotenv -e .env.local -- tsx scripts/seed.ts"
   },
   "dependencies": {

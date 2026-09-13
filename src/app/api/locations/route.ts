@@ -1,31 +1,47 @@
 import { put } from "@vercel/blob";
+import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { locations } from "@/db/schema";
-import { listApprovedLocations, toLocation } from "@/lib/locations";
+import { listApprovedLocations } from "@/lib/locations";
+import { safeErrorResponse } from "@/lib/server/api";
+import {
+  assertSameOrigin,
+  enforceRateLimit,
+} from "@/lib/server/security";
+import {
+  georgiaCoordinate,
+  InputError,
+  requiredText,
+  validEmail,
+  validIdempotencyKey,
+  validPhone,
+  yesNoBoolean,
+} from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
 const MAX_IMAGES = 1;
 const MAX_BYTES = 5 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
 
-function parseYesNo(value: FormDataEntryValue | null, field: string) {
-  const raw = String(value ?? "").trim().toLowerCase();
-  if (raw === "yes" || raw === "true") return true;
-  if (raw === "no" || raw === "false") return false;
-  throw new Error(`${field} must be Yes or No`);
-}
-
-function parseRequiredString(value: FormDataEntryValue | null, field: string) {
-  const raw = String(value ?? "").trim();
-  if (!raw) throw new Error(`${field} is required`);
-  return raw;
-}
-
-function parseCoord(value: FormDataEntryValue | null, field: string) {
-  const n = Number(String(value ?? "").trim());
-  if (!Number.isFinite(n)) throw new Error(`${field} must be a number`);
-  return n;
+async function hasValidImageSignature(file: File) {
+  const bytes = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  const isPng =
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47;
+  const header = new TextDecoder().decode(bytes);
+  const isGif = header.startsWith("GIF87a") || header.startsWith("GIF89a");
+  const isWebp = header.startsWith("RIFF") && header.slice(8, 12) === "WEBP";
+  return isJpeg || isPng || isGif || isWebp;
 }
 
 export async function GET() {
@@ -41,21 +57,29 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    assertSameOrigin(request);
+    await enforceRateLimit(request, "location-submission", 3, 24 * 60 * 60);
+
     const form = await request.formData();
-    const name = parseRequiredString(form.get("name"), "name");
-    const description = parseRequiredString(
+    const name = requiredText(form.get("name"), "Name", 160);
+    const description = requiredText(
       form.get("description"),
-      "description",
+      "Description",
+      1500,
     );
-    const latitude = parseCoord(form.get("latitude"), "latitude");
-    const longitude = parseCoord(form.get("longitude"), "longitude");
-    const is_24_7 = parseYesNo(form.get("is_24_7"), "is_24_7");
-    const has_naloxone = parseYesNo(form.get("has_naloxone"), "has_naloxone");
-    const has_fent_strips = parseYesNo(
+    const latitude = georgiaCoordinate(form.get("latitude"), "latitude");
+    const longitude = georgiaCoordinate(form.get("longitude"), "longitude");
+    const is_24_7 = yesNoBoolean(form.get("is_24_7"), "Open 24/7");
+    const has_naloxone = yesNoBoolean(form.get("has_naloxone"), "Has naloxone");
+    const has_fent_strips = yesNoBoolean(
       form.get("has_fent_strips"),
-      "has_fent_strips",
+      "Has fentanyl test strips",
     );
-    const type = parseRequiredString(form.get("type"), "type");
+    const type = requiredText(form.get("type"), "Type", 40);
+    if (type !== "V") throw new InputError("Invalid location type");
+    const contact_phone = validPhone(form.get("contact_phone"));
+    const contact_email = validEmail(form.get("contact_email"));
+    const submission_key = validIdempotencyKey(form.get("submission_key"));
 
     const files = form
       .getAll("images")
@@ -69,9 +93,9 @@ export async function POST(request: Request) {
     }
 
     for (const file of files) {
-      if (!file.type.startsWith("image/")) {
+      if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
         return NextResponse.json(
-          { error: "Only image files are allowed" },
+          { error: "Use a JPEG, PNG, WebP, or GIF image" },
           { status: 400 },
         );
       }
@@ -81,6 +105,22 @@ export async function POST(request: Request) {
           { status: 400 },
         );
       }
+      if (!(await hasValidImageSignature(file))) {
+        return NextResponse.json(
+          { error: "The selected file is not a valid image" },
+          { status: 400 },
+        );
+      }
+    }
+
+    const db = getDb();
+    const [existing] = await db
+      .select({ id: locations.id })
+      .from(locations)
+      .where(eq(locations.submission_key, submission_key))
+      .limit(1);
+    if (existing) {
+      return NextResponse.json({ success: true, duplicate: true });
     }
 
     const image_urls: string[] = [];
@@ -94,8 +134,7 @@ export async function POST(request: Request) {
       image_urls.push(blob.url);
     }
 
-    const db = getDb();
-    const [inserted] = await db
+    await db
       .insert(locations)
       .values({
         name,
@@ -107,19 +146,18 @@ export async function POST(request: Request) {
         has_fent_strips,
         type,
         image_urls,
-        status: "approved",
+        status: "pending",
+        contact_phone,
+        contact_email,
+        submission_key,
       })
-      .returning();
+      .onConflictDoNothing({ target: locations.submission_key });
 
     return NextResponse.json(
-      { location: toLocation(inserted) },
+      { success: true },
       { status: 201 },
     );
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to save location";
-    const status =
-      message.includes("required") || message.includes("must") ? 400 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return safeErrorResponse(error, "Unable to submit location");
   }
 }

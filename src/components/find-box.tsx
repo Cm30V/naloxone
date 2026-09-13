@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SupplyReportDialog } from "@/components/supply-report-dialog";
 import { displayImageSrc } from "@/lib/image";
 import { formatDistance, haversineKm, mapsDirectionsUrl } from "@/lib/geo";
 import type { Location, RankedLocation } from "@/lib/types";
@@ -58,28 +59,35 @@ export function FindBox({ locations }: Props) {
   const scrollerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!navigator.geolocation) {
-      setGeoStatus("unavailable");
-      setGeoError("This browser does not support location. Enter a ZIP instead.");
-      return;
-    }
-    setGeoStatus("requesting");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setGeoStatus("granted");
-        setActiveIndex(0);
-      },
-      (err) => {
-        setGeoStatus(err.code === err.PERMISSION_DENIED ? "denied" : "unavailable");
+    const timeout = window.setTimeout(() => {
+      if (!navigator.geolocation) {
+        setGeoStatus("unavailable");
         setGeoError(
-          err.code === err.PERMISSION_DENIED
-            ? "Location permission was denied. Enter a Georgia ZIP or address below."
-            : "Could not read your location. Enter a Georgia ZIP or address below.",
+          "This browser does not support location. Enter a ZIP instead.",
         );
-      },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
-    );
+        return;
+      }
+      setGeoStatus("requesting");
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          setGeoStatus("granted");
+          setActiveIndex(0);
+        },
+        (err) => {
+          setGeoStatus(
+            err.code === err.PERMISSION_DENIED ? "denied" : "unavailable",
+          );
+          setGeoError(
+            err.code === err.PERMISSION_DENIED
+              ? "Location permission was denied. Enter a Georgia ZIP or address below."
+              : "Could not read your location. Enter a Georgia ZIP or address below.",
+          );
+        },
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
+      );
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, []);
 
   const matches = useMemo(() => {
@@ -361,14 +369,20 @@ export function FindBox({ locations }: Props) {
               Opens your phone’s map app with this box as the destination.
             </p>
             {active ? (
-              <Button
-                asChild
-                className="h-16 w-full text-lg font-semibold"
-              >
-                <a href={mapsHref} target="_blank" rel="noopener noreferrer">
-                  Open in Maps
-                </a>
-              </Button>
+              <>
+                <Button
+                  asChild
+                  className="h-16 w-full text-lg font-semibold"
+                >
+                  <a href={mapsHref} target="_blank" rel="noopener noreferrer">
+                    Open in Maps
+                  </a>
+                </Button>
+                <SupplyReportDialog
+                  locationId={active.id}
+                  locationName={active.name}
+                />
+              </>
             ) : (
               <Button className="h-16 w-full text-lg" disabled>
                 Open in Maps

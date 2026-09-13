@@ -21,7 +21,6 @@ const MAX_BYTES = 5 * 1024 * 1024;
 
 type Props = {
   locations: Location[];
-  onCreated: (location: Location) => void;
 };
 
 function YesNo({
@@ -62,7 +61,7 @@ function YesNo({
   );
 }
 
-export function UploadBox({ locations, onCreated }: Props) {
+export function UploadBox({ locations }: Props) {
   const types = useMemo(() => {
     const fromData = Array.from(new Set(locations.map((l) => l.type).filter(Boolean)));
     return fromData.length ? fromData : ["V"];
@@ -72,6 +71,8 @@ export function UploadBox({ locations, onCreated }: Props) {
   const [description, setDescription] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
   const [is247, setIs247] = useState("yes");
   const [hasNaloxone, setHasNaloxone] = useState("yes");
   const [hasStrips, setHasStrips] = useState("no");
@@ -82,6 +83,7 @@ export function UploadBox({ locations, onCreated }: Props) {
   );
   const [message, setMessage] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
+  const [submissionKey, setSubmissionKey] = useState("");
 
   function onFiles(list: FileList | null) {
     const next = Array.from(list ?? []);
@@ -128,6 +130,8 @@ export function UploadBox({ locations, onCreated }: Props) {
     setStatus("saving");
     setMessage(null);
     try {
+      const requestKey = submissionKey || crypto.randomUUID();
+      if (!submissionKey) setSubmissionKey(requestKey);
       const form = new FormData();
       form.set("name", name);
       form.set("description", description);
@@ -137,20 +141,29 @@ export function UploadBox({ locations, onCreated }: Props) {
       form.set("has_naloxone", hasNaloxone);
       form.set("has_fent_strips", hasStrips);
       form.set("type", type);
+      form.set("contact_phone", contactPhone);
+      form.set("contact_email", contactEmail);
+      form.set("submission_key", requestKey);
       for (const file of files) form.append("images", file);
 
       const res = await fetch("/api/locations", { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Submit failed");
 
-      onCreated(data.location as Location);
       setStatus("success");
-      setMessage("Saved. This box is live in Find a Distribution Box.");
+      setMessage(
+        data.duplicate
+          ? "This submission was already received and is waiting for review."
+          : "Submitted for administrator review. It will appear publicly only after approval.",
+      );
       setName("");
       setDescription("");
       setLatitude("");
       setLongitude("");
+      setContactPhone("");
+      setContactEmail("");
       setFiles([]);
+      setSubmissionKey("");
     } catch (err) {
       setStatus("error");
       setMessage(err instanceof Error ? err.message : "Submit failed");
@@ -217,6 +230,43 @@ export function UploadBox({ locations, onCreated }: Props) {
           />
         </div>
       </div>
+
+      <fieldset className="space-y-4 rounded-xl border border-border bg-card p-4">
+        <legend className="px-1 text-base font-semibold">
+          Contact information
+        </legend>
+        <p className="text-sm text-muted-foreground">
+          Required for administrator review. This information is never shown
+          publicly.
+        </p>
+        <div className="space-y-2">
+          <Label htmlFor="contact-phone">Phone number</Label>
+          <Input
+            id="contact-phone"
+            type="tel"
+            autoComplete="tel"
+            required
+            minLength={7}
+            maxLength={25}
+            value={contactPhone}
+            onChange={(event) => setContactPhone(event.target.value)}
+            className="h-12 text-base"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="contact-email">Email address</Label>
+          <Input
+            id="contact-email"
+            type="email"
+            autoComplete="email"
+            required
+            maxLength={254}
+            value={contactEmail}
+            onChange={(event) => setContactEmail(event.target.value)}
+            className="h-12 text-base"
+          />
+        </div>
+      </fieldset>
       <Button
         type="button"
         variant="secondary"

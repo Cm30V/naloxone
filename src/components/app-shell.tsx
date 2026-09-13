@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { AdminDashboard } from "@/components/admin-dashboard";
 import { FindBox } from "@/components/find-box";
 import { UploadBox } from "@/components/upload-box";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,14 +12,19 @@ export function AppShell() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const loadLocations = useCallback(async () => {
+    setLoadError(null);
+    const res = await fetch("/api/locations", { cache: "no-store" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to load locations");
+    setLocations(data.locations ?? []);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/locations");
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Failed to load locations");
-        if (!cancelled) setLocations(data.locations ?? []);
+        if (!cancelled) await loadLocations();
       } catch (err) {
         if (!cancelled) {
           setLoadError(err instanceof Error ? err.message : "Failed to load");
@@ -30,7 +36,7 @@ export function AppShell() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadLocations]);
 
   return (
     <div className="flex min-h-dvh flex-col bg-background">
@@ -49,12 +55,15 @@ export function AppShell() {
 
       <Tabs defaultValue="find" className="flex min-h-0 flex-1 flex-col gap-0">
         <div className="border-b px-4 py-3">
-          <TabsList className="grid h-12 min-h-12 w-full grid-cols-2">
+          <TabsList className="grid h-12 min-h-12 w-full grid-cols-3">
             <TabsTrigger value="find" className="text-base">
               Find a box
             </TabsTrigger>
             <TabsTrigger value="upload" className="text-base">
               Add a box
+            </TabsTrigger>
+            <TabsTrigger value="admin" className="text-base">
+              Admin
             </TabsTrigger>
           </TabsList>
         </div>
@@ -74,9 +83,19 @@ export function AppShell() {
           forceMount
           className="mt-0 flex-1 overflow-y-auto data-[state=inactive]:hidden"
         >
-          <UploadBox
-            locations={locations}
-            onCreated={(loc) => setLocations((prev) => [loc, ...prev])}
+          <UploadBox locations={locations} />
+        </TabsContent>
+        <TabsContent
+          value="admin"
+          forceMount
+          className="mt-0 flex-1 overflow-y-auto data-[state=inactive]:hidden"
+        >
+          <AdminDashboard
+            onLocationPublished={() => {
+              loadLocations().catch(() => {
+                setLoadError("Unable to refresh public locations");
+              });
+            }}
           />
         </TabsContent>
       </Tabs>

@@ -20,14 +20,15 @@ export function isAllowedImageHost(url: URL) {
   return (
     url.protocol === "https:" &&
     (ALLOWED_HOSTS.has(url.hostname) ||
-      url.hostname.endsWith(".googleusercontent.com") ||
-      url.hostname.endsWith(".public.blob.vercel-storage.com"))
+      url.hostname.endsWith(".googleusercontent.com"))
   );
 }
 
 export function displayImageSrc(url: string) {
   if (isGoogleHostedImage(url)) {
-    return `/api/image-proxy?url=${encodeURIComponent(url)}`;
+    const resized = new URL(url);
+    resized.searchParams.set("fife", "s1200");
+    return `/api/image-proxy?url=${encodeURIComponent(resized.toString())}`;
   }
   return url;
 }

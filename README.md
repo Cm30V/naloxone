@@ -39,7 +39,7 @@ CSV columns (confirmed from the file): `name`, `description`, `latitude`, `longi
 
    ```bash
    npm install
-   npm run db:push
+   npm run db:migrate
    npm run db:seed
    ```
 
@@ -49,6 +49,24 @@ Required environment variables are listed in `.env.example`:
 
 - `DATABASE_URL` — Neon connection string
 - `BLOB_READ_WRITE_TOKEN` — Vercel Blob write token
+- `ADMIN_PASSWORD_HASH` — server-only scrypt hash of the admin access code
+- `ADMIN_SESSION_SECRET` — random server-only secret of at least 32 characters
+- `RATE_LIMIT_SECRET` — optional separate HMAC secret; defaults to
+  `ADMIN_SESSION_SECRET`
+
+Never prefix these variables with `NEXT_PUBLIC_`. Create the password hash
+locally without saving the plaintext password in a file:
+
+```bash
+read -s "ADMIN_PASSWORD?Admin access code: "; export ADMIN_PASSWORD; echo
+node -e 'const c=require("node:crypto"),s=c.randomBytes(16),h=c.scryptSync(process.env.ADMIN_PASSWORD,s,64);console.log(`scrypt:${s.toString("base64url")}:${h.toString("base64url")}`)'
+unset ADMIN_PASSWORD
+```
+
+Save the printed hash as `ADMIN_PASSWORD_HASH` in Vercel. Generate
+`ADMIN_SESSION_SECRET` with `openssl rand -base64 48`. Add both variables to
+Production, Preview, and Development, then pull Development variables again
+with `npx vercel env pull .env.local --yes`.
 
 ## Deploy
 
@@ -56,19 +74,37 @@ Required environment variables are listed in `.env.example`:
 npx vercel deploy
 ```
 
-After the first production deploy, run `db:push` and `db:seed` against the **production** `DATABASE_URL` as well (or use Neon’s SQL editor) so production is not an empty table.
+After the first production deploy, run `db:migrate` and `db:seed` against the
+**production** `DATABASE_URL` as well (or use Neon’s SQL editor) so production
+has the required tables and seed locations. The migration is idempotent and
+does not remove existing records.
 
 ## API
 
 - `GET /api/locations` — all **approved** locations (seeded + user-submitted).
-- `POST /api/locations` — multipart form: `name`, `description`, `latitude`, `longitude`, `is_24_7`, `has_naloxone`, `has_fent_strips`, `type`, and one optional `images` file. Images go to Blob; the row is stored in Neon.
+- `POST /api/locations` — validates and stores a new **pending** location,
+  private contact phone/email, and one optional image.
+- `POST /api/locations/:id/reports` — stores a supply-used or restock report
+  for an approved location.
+- `/api/admin/*` — authenticated dashboard, moderation, and report-management
+  endpoints. Every protected operation verifies the signed server session.
 
-## Moderation (must revisit before a real launch)
+## Moderation and security
 
-User-submitted boxes are **auto-approved** so they show up immediately in Find a box. That is the simplest prototype behavior. Before any public launch, add review: bad actors could submit fake or harmful coordinates. There is **no admin dashboard** yet — that is a next step, along with accounts/auth.
+User-submitted boxes remain **pending** until an administrator approves them.
+Contact details are returned only by an authenticated admin endpoint and are
+never included in the public location DTO. Public submissions, supply reports,
+and admin login attempts have database-backed rate limits. Supply reports use
+idempotency keys plus a one-way, server-keyed request-source identifier and a
+per-location/report-type daily uniqueness constraint. Raw IP addresses are not
+stored.
+
+This remains a prototype. Before a real-world launch, replace the shared admin
+code with individual administrator accounts and MFA, add audit logs and alerting,
+define data-retention rules for contact details and rate-limit records, and
+arrange regular dependency and penetration testing.
 
 ## Out of scope
 
-- User authentication
-- Admin moderation UI
+- Public user authentication/accounts
 - In-app turn-by-turn routing (the app hands off to Apple Maps on iOS and Google Maps otherwise)
