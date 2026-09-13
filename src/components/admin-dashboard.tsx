@@ -280,7 +280,7 @@ export function AdminDashboard({ onLocationPublished }: Props) {
       ) : null}
 
       <Tabs defaultValue="pending" className="gap-5">
-        <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-4">
+        <TabsList className="grid h-auto w-full grid-cols-2 items-stretch gap-1 group-data-horizontal/tabs:h-auto sm:grid-cols-4">
           <TabsTrigger value="pending" className="min-h-12 whitespace-normal">
             Pending locations
           </TabsTrigger>

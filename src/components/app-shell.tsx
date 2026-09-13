@@ -55,7 +55,7 @@ export function AppShell() {
 
       <Tabs defaultValue="find" className="flex min-h-0 flex-1 flex-col gap-0">
         <div className="border-b px-4 py-3">
-          <TabsList className="grid h-12 min-h-12 w-full grid-cols-3">
+          <TabsList className="grid h-12 min-h-12 w-full grid-cols-3 group-data-horizontal/tabs:h-12">
             <TabsTrigger value="find" className="text-base">
               Find a box
             </TabsTrigger>
