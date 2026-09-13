@@ -1,12 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { displayImageSrc } from "@/lib/image";
 
 type PendingLocation = {
   id: string;
@@ -40,10 +48,18 @@ type RestockReport = {
   resolved_at: string | null;
 };
 
+type UnresolvedRestock = {
+  location_id: string;
+  location_name: string;
+  request_count: number;
+  latest_report_at: string;
+};
+
 type DashboardData = {
   pending: PendingLocation[];
   locationStats: LocationStat[];
   restockReports: RestockReport[];
+  unresolvedRestocks: UnresolvedRestock[];
 };
 
 type Props = {
@@ -57,6 +73,10 @@ export function AdminDashboard({ onLocationPublished }: Props) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [usageFilter, setUsageFilter] = useState<"all" | "unresolved">("all");
+  const [usageSort, setUsageSort] = useState<
+    "name" | "used-desc" | "used-asc" | "restock-desc" | "restock-asc"
+  >("name");
 
   const loadDashboard = useCallback(async () => {
     const response = await fetch("/api/admin/dashboard", { cache: "no-store" });
@@ -133,17 +153,18 @@ export function AdminDashboard({ onLocationPublished }: Props) {
     }
   }
 
-  async function setReportResolved(id: string, resolved: boolean) {
-    setBusyId(id);
+  async function resolveLocationRestocks(locationId: string) {
+    setBusyId(locationId);
     setError(null);
     try {
-      const response = await fetch(`/api/admin/reports/${id}`, {
+      const response = await fetch(`/api/admin/restocks/${locationId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resolved }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "Update failed");
+      setMessage(
+        `${body.resolved} restock request${body.resolved === 1 ? "" : "s"} marked resolved.`,
+      );
       await loadDashboard();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Update failed");
@@ -151,6 +172,25 @@ export function AdminDashboard({ onLocationPublished }: Props) {
       setBusyId(null);
     }
   }
+
+  const displayedLocationStats = useMemo(() => {
+    const locations =
+      data?.locationStats.filter(
+        (location) =>
+          usageFilter === "all" || location.unresolved_restock_count > 0,
+      ) ?? [];
+    return [...locations].sort((a, b) => {
+      if (usageSort === "used-desc") return b.used_count - a.used_count;
+      if (usageSort === "used-asc") return a.used_count - b.used_count;
+      if (usageSort === "restock-desc") {
+        return b.total_restock_count - a.total_restock_count;
+      }
+      if (usageSort === "restock-asc") {
+        return a.total_restock_count - b.total_restock_count;
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }, [data?.locationStats, usageFilter, usageSort]);
 
   if (authenticated === null) {
     return <p className="px-4 py-6 text-muted-foreground">Checking access…</p>;
@@ -195,9 +235,16 @@ export function AdminDashboard({ onLocationPublished }: Props) {
   }
 
   const unresolved =
-    data?.restockReports.filter((report) => !report.resolved_at) ?? [];
+    data?.unresolvedRestocks ?? [];
   const resolved =
     data?.restockReports.filter((report) => report.resolved_at) ?? [];
+  const unresolvedRequestCount = unresolved.reduce(
+    (sum, report) => sum + report.request_count,
+    0,
+  );
+  const totalUsedReports =
+    data?.locationStats.reduce((sum, location) => sum + location.used_count, 0) ??
+    0;
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 pb-12">
@@ -243,6 +290,19 @@ export function AdminDashboard({ onLocationPublished }: Props) {
                   <CardTitle>{location.name}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  {location.image_urls[0] ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={displayImageSrc(location.image_urls[0])}
+                      alt={`Submitted photo of ${location.name}`}
+                      className="aspect-video w-full rounded-lg border object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+                      No photo submitted.
+                    </p>
+                  )}
                   <p className="text-sm text-muted-foreground">
                     {location.description}
                   </p>
@@ -290,7 +350,9 @@ export function AdminDashboard({ onLocationPublished }: Props) {
         <div className="flex items-center gap-2">
           <h3 className="text-xl font-semibold">Restock needed</h3>
           <Badge variant={unresolved.length ? "destructive" : "secondary"}>
-            {unresolved.length} unresolved
+            {unresolvedRequestCount} request
+            {unresolvedRequestCount === 1 ? "" : "s"} across {unresolved.length}{" "}
+            location{unresolved.length === 1 ? "" : "s"}
           </Badge>
         </div>
         {!unresolved.length ? (
@@ -300,21 +362,32 @@ export function AdminDashboard({ onLocationPublished }: Props) {
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {unresolved.map((report) => (
-              <Card key={report.id} className="border-destructive/50">
+              <Card
+                key={report.location_id}
+                className="border-destructive/50"
+              >
                 <CardContent className="space-y-3 pt-5">
                   <div>
                     <Badge variant="destructive">Unresolved</Badge>
                     <p className="mt-2 font-medium">{report.location_name}</p>
+                    <p className="text-base font-semibold">
+                      {report.request_count}{" "}
+                      {report.request_count === 1 ? "person has" : "people have"}{" "}
+                      requested restocking
+                    </p>
                     <p className="text-sm text-muted-foreground">
-                      Reported {new Date(report.created_at).toLocaleString()}
+                      Latest request{" "}
+                      {new Date(report.latest_report_at).toLocaleString()}
                     </p>
                   </div>
                   <Button
                     className="w-full"
-                    disabled={busyId === report.id}
-                    onClick={() => setReportResolved(report.id, true)}
+                    disabled={busyId === report.location_id}
+                    onClick={() =>
+                      resolveLocationRestocks(report.location_id)
+                    }
                   >
-                    Mark resolved
+                    Mark all resolved
                   </Button>
                 </CardContent>
               </Card>
@@ -324,7 +397,62 @@ export function AdminDashboard({ onLocationPublished }: Props) {
       </section>
 
       <section className="space-y-3">
-        <h3 className="text-xl font-semibold">Supply usage by location</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-xl font-semibold">Supply usage by location</h3>
+          <Badge variant="secondary">
+            {totalUsedReports} total used/taken reports
+          </Badge>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="usage-filter">Show locations</Label>
+            <Select
+              value={usageFilter}
+              onValueChange={(value: "all" | "unresolved") =>
+                setUsageFilter(value)
+              }
+            >
+              <SelectTrigger id="usage-filter" className="h-11 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All locations</SelectItem>
+                <SelectItem value="unresolved">
+                  Unresolved restocks only
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="usage-sort">Sort by</Label>
+            <Select
+              value={usageSort}
+              onValueChange={(
+                value:
+                  | "name"
+                  | "used-desc"
+                  | "used-asc"
+                  | "restock-desc"
+                  | "restock-asc",
+              ) => setUsageSort(value)}
+            >
+              <SelectTrigger id="usage-sort" className="h-11 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="name">Location name</SelectItem>
+                <SelectItem value="used-desc">Most used/taken</SelectItem>
+                <SelectItem value="used-asc">Least used/taken</SelectItem>
+                <SelectItem value="restock-desc">
+                  Most total restocks
+                </SelectItem>
+                <SelectItem value="restock-asc">
+                  Least total restocks
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full min-w-[560px] text-left text-sm">
             <thead className="bg-muted">
@@ -336,7 +464,7 @@ export function AdminDashboard({ onLocationPublished }: Props) {
               </tr>
             </thead>
             <tbody>
-              {data?.locationStats.map((location) => (
+              {displayedLocationStats.map((location) => (
                 <tr key={location.id} className="border-t">
                   <td className="p-3 font-medium">{location.name}</td>
                   <td className="p-3">{location.used_count}</td>
@@ -369,13 +497,6 @@ export function AdminDashboard({ onLocationPublished }: Props) {
                     Resolved {new Date(report.resolved_at!).toLocaleString()}
                   </p>
                 </div>
-                <Button
-                  variant="outline"
-                  disabled={busyId === report.id}
-                  onClick={() => setReportResolved(report.id, false)}
-                >
-                  Reopen
-                </Button>
               </div>
             ))}
           </div>

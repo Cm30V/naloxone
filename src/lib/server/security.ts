@@ -51,14 +51,20 @@ export function requestIdentity(request: Request, scope: string) {
   return privateKey(scope, clientAddress(request));
 }
 
-export async function enforceRateLimit(
+export function requestIdentityWithValue(
   request: Request,
   scope: string,
+  value: string,
+) {
+  return privateKey(scope, `${clientAddress(request)}:${value}`);
+}
+
+async function consumeRateLimit(
+  key: string,
   limit: number,
   windowSeconds: number,
 ) {
   const db = getDb();
-  const key = `${scope}:${requestIdentity(request, scope)}`;
   const resetAt = new Date(Date.now() + windowSeconds * 1000);
 
   const [result] = await db
@@ -76,4 +82,30 @@ export async function enforceRateLimit(
   if (result.count > limit) {
     throw new TooManyRequestsError("Too many requests. Please try again later.");
   }
+}
+
+export async function enforceRateLimit(
+  request: Request,
+  scope: string,
+  limit: number,
+  windowSeconds: number,
+) {
+  return consumeRateLimit(
+    `${scope}:${requestIdentity(request, scope)}`,
+    limit,
+    windowSeconds,
+  );
+}
+
+export async function enforceValueRateLimit(
+  scope: string,
+  value: string,
+  limit: number,
+  windowSeconds: number,
+) {
+  return consumeRateLimit(
+    `${scope}:${privateKey(scope, value.trim().toLowerCase())}`,
+    limit,
+    windowSeconds,
+  );
 }

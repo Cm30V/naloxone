@@ -1,4 +1,4 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { locations, supplyReports } from "@/db/schema";
@@ -62,16 +62,37 @@ export async function GET() {
         desc(supplyReports.created_at),
       );
 
-    const [pending, locationStats, restockReports] = await Promise.all([
-      pendingQuery,
-      locationStatsQuery,
-      restockReportsQuery,
-    ]);
+    const unresolvedRestocksQuery = db
+      .select({
+        location_id: supplyReports.location_id,
+        location_name: locations.name,
+        request_count: sql<number>`count(*)::int`,
+        latest_report_at: sql<string>`max(${supplyReports.created_at})`,
+      })
+      .from(supplyReports)
+      .innerJoin(locations, eq(locations.id, supplyReports.location_id))
+      .where(
+        and(
+          eq(supplyReports.report_type, "restock"),
+          isNull(supplyReports.resolved_at),
+        ),
+      )
+      .groupBy(supplyReports.location_id, locations.name)
+      .orderBy(desc(sql`count(*)`), locations.name);
+
+    const [pending, locationStats, restockReports, unresolvedRestocks] =
+      await Promise.all([
+        pendingQuery,
+        locationStatsQuery,
+        restockReportsQuery,
+        unresolvedRestocksQuery,
+      ]);
 
     return NextResponse.json({
       pending,
       locationStats,
       restockReports,
+      unresolvedRestocks,
     });
   } catch (error) {
     return safeErrorResponse(error, "Unable to load admin dashboard");

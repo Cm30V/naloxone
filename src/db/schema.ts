@@ -12,25 +12,33 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-export const locations = pgTable("locations", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  name: text("name").notNull(),
-  description: text("description").notNull(),
-  latitude: real("latitude").notNull(),
-  longitude: real("longitude").notNull(),
-  is_24_7: boolean("is_24_7").notNull(),
-  has_naloxone: boolean("has_naloxone").notNull(),
-  has_fent_strips: boolean("has_fent_strips").notNull(),
-  type: text("type").notNull().default("V"),
-  image_urls: text("image_urls").array().notNull().default(sql`'{}'`),
-  status: text("status").notNull().default("approved"),
-  contact_phone: text("contact_phone"),
-  contact_email: text("contact_email"),
-  submission_key: text("submission_key").unique(),
-  created_at: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const locations = pgTable(
+  "locations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    description: text("description").notNull(),
+    latitude: real("latitude").notNull(),
+    longitude: real("longitude").notNull(),
+    is_24_7: boolean("is_24_7").notNull(),
+    has_naloxone: boolean("has_naloxone").notNull(),
+    has_fent_strips: boolean("has_fent_strips").notNull(),
+    type: text("type").notNull().default("V"),
+    image_urls: text("image_urls").array().notNull().default(sql`'{}'`),
+    status: text("status").notNull().default("approved"),
+    contact_phone: text("contact_phone"),
+    contact_email: text("contact_email"),
+    submission_key: text("submission_key").unique(),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("locations_active_name_unique")
+      .on(sql`lower(trim(${table.name}))`)
+      .where(sql`${table.status} in ('approved', 'pending')`),
+  ],
+);
 
 export const supplyReports = pgTable(
   "supply_reports",
@@ -49,12 +57,11 @@ export const supplyReports = pgTable(
     resolved_at: timestamp("resolved_at", { withTimezone: true }),
   },
   (table) => [
-    uniqueIndex("supply_report_daily_unique").on(
-      table.location_id,
-      table.report_type,
-      table.reporter_key,
-      table.reporting_day,
-    ),
+    uniqueIndex("supply_report_open_restock_unique")
+      .on(table.location_id, table.reporter_key)
+      .where(
+        sql`${table.report_type} = 'restock' and ${table.resolved_at} is null`,
+      ),
     index("supply_report_location_idx").on(table.location_id),
     index("supply_report_unresolved_idx").on(
       table.report_type,

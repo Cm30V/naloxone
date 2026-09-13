@@ -85,9 +85,12 @@ does not remove existing records.
 
 - `GET /api/locations` — all **approved** locations (seeded + user-submitted).
 - `POST /api/locations` — validates and stores a new **pending** location,
-  private contact phone/email, and one optional image.
+  private contact phone/email, and one optional image. Active and pending
+  location names must be unique, ignoring capitalization and surrounding
+  whitespace.
 - `POST /api/locations/:id/reports` — stores a supply-used or restock report
-  for an approved location.
+  for an approved location. A supply-used report also creates an unresolved
+  restock request for that location.
 - `/api/admin/*` — authenticated dashboard, moderation, and report-management
   endpoints. Every protected operation verifies the signed server session.
 
@@ -96,10 +99,12 @@ does not remove existing records.
 User-submitted boxes remain **pending** until an administrator approves them.
 Contact details are returned only by an authenticated admin endpoint and are
 never included in the public location DTO. Public submissions, supply reports,
-and admin login attempts have database-backed rate limits. Supply reports use
-idempotency keys plus a one-way, server-keyed request-source identifier and a
-per-location/report-type daily uniqueness constraint. Raw IP addresses are not
-stored.
+and admin login attempts have database-backed rate limits. Location-submission
+limits are scoped to a one-way hash of the contact email rather than globally
+blocking everyone on a shared network. Supply reports use idempotency keys and
+a one-way, server-keyed source/browser identifier. A browser can have one
+active restock request per location; after administrators resolve it, a later
+request reopens the location. Raw IP addresses are not stored.
 
 This remains a prototype. Before a real-world launch, replace the shared admin
 code with individual administrator accounts and MFA, add audit logs and alerting,

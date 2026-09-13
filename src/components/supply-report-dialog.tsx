@@ -16,6 +16,20 @@ type Props = {
   locationName: string;
 };
 
+const REPORTER_STORAGE_KEY = "naloxone-supply-reporter-id";
+
+function getReporterKey() {
+  try {
+    const existing = window.localStorage.getItem(REPORTER_STORAGE_KEY);
+    if (existing) return existing;
+    const created = crypto.randomUUID();
+    window.localStorage.setItem(REPORTER_STORAGE_KEY, created);
+    return created;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
+
 export function SupplyReportDialog({ locationId, locationName }: Props) {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">(
@@ -41,7 +55,11 @@ export function SupplyReportDialog({ locationId, locationName }: Props) {
       const response = await fetch(`/api/locations/${locationId}/reports`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, idempotencyKey }),
+        body: JSON.stringify({
+          type,
+          idempotencyKey,
+          reporterKey: getReporterKey(),
+        }),
       });
       const data = (await response.json()) as {
         error?: string;
@@ -51,8 +69,10 @@ export function SupplyReportDialog({ locationId, locationName }: Props) {
       setStatus("success");
       setMessage(
         data.duplicate
-          ? "We already received this report. Thank you."
-          : "Report received. Thank you for helping keep this location accurate.",
+          ? "This location already has your active restock request. Thank you."
+          : type === "used"
+            ? "Usage recorded. This location was also added to the restock list."
+            : "Restock request received. Thank you for helping keep this location accurate.",
       );
     } catch (error) {
       setStatus("error");

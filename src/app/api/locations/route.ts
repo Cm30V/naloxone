@@ -1,5 +1,5 @@
 import { put } from "@vercel/blob";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { locations } from "@/db/schema";
@@ -7,7 +7,7 @@ import { listApprovedLocations } from "@/lib/locations";
 import { safeErrorResponse } from "@/lib/server/api";
 import {
   assertSameOrigin,
-  enforceRateLimit,
+  enforceValueRateLimit,
 } from "@/lib/server/security";
 import {
   georgiaCoordinate,
@@ -58,7 +58,6 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
-    await enforceRateLimit(request, "location-submission", 3, 24 * 60 * 60);
 
     const form = await request.formData();
     const name = requiredText(form.get("name"), "Name", 160);
@@ -80,6 +79,12 @@ export async function POST(request: Request) {
     const contact_phone = validPhone(form.get("contact_phone"));
     const contact_email = validEmail(form.get("contact_email"));
     const submission_key = validIdempotencyKey(form.get("submission_key"));
+    await enforceValueRateLimit(
+      "location-submission-contact",
+      contact_email,
+      10,
+      24 * 60 * 60,
+    );
 
     const files = form
       .getAll("images")
@@ -123,6 +128,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, duplicate: true });
     }
 
+    const [sameName] = await db
+      .select({ id: locations.id })
+      .from(locations)
+      .where(
+        and(
+          inArray(locations.status, ["approved", "pending"]),
+          sql`lower(trim(${locations.name})) = lower(trim(${name}))`,
+        ),
+      )
+      .limit(1);
+    if (sameName) {
+      throw new InputError(
+        "A location with this name already exists or is awaiting review",
+      );
+    }
+
     const image_urls: string[] = [];
     for (const [index, file] of files.entries()) {
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -134,7 +155,7 @@ export async function POST(request: Request) {
       image_urls.push(blob.url);
     }
 
-    await db
+    const inserted = await db
       .insert(locations)
       .values({
         name,
@@ -151,7 +172,22 @@ export async function POST(request: Request) {
         contact_email,
         submission_key,
       })
-      .onConflictDoNothing({ target: locations.submission_key });
+      .onConflictDoNothing()
+      .returning({ id: locations.id });
+
+    if (!inserted.length) {
+      const [duplicateRequest] = await db
+        .select({ id: locations.id })
+        .from(locations)
+        .where(eq(locations.submission_key, submission_key))
+        .limit(1);
+      if (duplicateRequest) {
+        return NextResponse.json({ success: true, duplicate: true });
+      }
+      throw new InputError(
+        "A location with this name already exists or is awaiting review",
+      );
+    }
 
     return NextResponse.json(
       { success: true },

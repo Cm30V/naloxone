@@ -12,12 +12,17 @@ if (!databaseUrl) throw new Error("DATABASE_URL is not set");
 const sql = neon(databaseUrl);
 
 async function main() {
-await sql`ALTER TABLE locations ADD COLUMN IF NOT EXISTS contact_phone text`;
-await sql`ALTER TABLE locations ADD COLUMN IF NOT EXISTS contact_email text`;
-await sql`ALTER TABLE locations ADD COLUMN IF NOT EXISTS submission_key text`;
-await sql`CREATE UNIQUE INDEX IF NOT EXISTS locations_submission_key_unique ON locations (submission_key)`;
+  await sql`ALTER TABLE locations ADD COLUMN IF NOT EXISTS contact_phone text`;
+  await sql`ALTER TABLE locations ADD COLUMN IF NOT EXISTS contact_email text`;
+  await sql`ALTER TABLE locations ADD COLUMN IF NOT EXISTS submission_key text`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS locations_submission_key_unique ON locations (submission_key)`;
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS locations_active_name_unique
+    ON locations (lower(trim(name)))
+    WHERE status IN ('approved', 'pending')
+  `;
 
-await sql`
+  await sql`
   CREATE TABLE IF NOT EXISTS supply_reports (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     location_id uuid NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
@@ -29,20 +34,22 @@ await sql`
     resolved_at timestamptz
   )
 `;
-await sql`
-  CREATE UNIQUE INDEX IF NOT EXISTS supply_report_daily_unique
-  ON supply_reports (location_id, report_type, reporter_key, reporting_day)
-`;
-await sql`
+  await sql`DROP INDEX IF EXISTS supply_report_daily_unique`;
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS supply_report_open_restock_unique
+    ON supply_reports (location_id, reporter_key)
+    WHERE report_type = 'restock' AND resolved_at IS NULL
+  `;
+  await sql`
   CREATE INDEX IF NOT EXISTS supply_report_location_idx
   ON supply_reports (location_id)
 `;
-await sql`
+  await sql`
   CREATE INDEX IF NOT EXISTS supply_report_unresolved_idx
   ON supply_reports (report_type, resolved_at)
 `;
 
-await sql`
+  await sql`
   CREATE TABLE IF NOT EXISTS rate_limits (
     key text PRIMARY KEY,
     count integer NOT NULL DEFAULT 1,
@@ -50,7 +57,7 @@ await sql`
   )
 `;
 
-console.log("Admin and supply-report schema is ready.");
+  console.log("Admin and supply-report schema is ready.");
 }
 
 main().catch((error) => {
