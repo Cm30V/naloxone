@@ -8,6 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -273,7 +279,24 @@ export function AdminDashboard({ onLocationPublished }: Props) {
         </Alert>
       ) : null}
 
-      <section className="space-y-3">
+      <Tabs defaultValue="pending" className="gap-5">
+        <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-4">
+          <TabsTrigger value="pending" className="min-h-12 whitespace-normal">
+            Pending locations
+          </TabsTrigger>
+          <TabsTrigger value="restock" className="min-h-12 whitespace-normal">
+            Restock needed
+          </TabsTrigger>
+          <TabsTrigger value="used" className="min-h-12 whitespace-normal">
+            Used/taken reports
+          </TabsTrigger>
+          <TabsTrigger value="history" className="min-h-12 whitespace-normal">
+            Restock history
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="pending" className="mt-0">
+          <section className="space-y-3">
         <div className="flex items-center gap-2">
           <h3 className="text-xl font-semibold">Pending locations</h3>
           <Badge variant="secondary">{data?.pending.length ?? 0}</Badge>
@@ -344,9 +367,11 @@ export function AdminDashboard({ onLocationPublished }: Props) {
             ))}
           </div>
         )}
-      </section>
+          </section>
+        </TabsContent>
 
-      <section className="space-y-3">
+        <TabsContent value="restock" className="mt-0">
+          <section className="space-y-3">
         <div className="flex items-center gap-2">
           <h3 className="text-xl font-semibold">Restock needed</h3>
           <Badge variant={unresolved.length ? "destructive" : "secondary"}>
@@ -394,15 +419,26 @@ export function AdminDashboard({ onLocationPublished }: Props) {
             ))}
           </div>
         )}
-      </section>
+          </section>
+        </TabsContent>
 
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-xl font-semibold">Supply usage by location</h3>
-          <Badge variant="secondary">
-            {totalUsedReports} total used/taken reports
-          </Badge>
+        <TabsContent value="used" className="mt-0">
+          <section className="space-y-3">
+        <div>
+          <h3 className="text-xl font-semibold">Total Used/taken reports</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            One total counter plus the per-location breakdown.
+          </p>
         </div>
+        <Card>
+          <CardContent className="py-6 text-center">
+            <p className="text-5xl font-bold tabular-nums">{totalUsedReports}</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Total Used/taken reports
+            </p>
+          </CardContent>
+        </Card>
+        <h4 className="text-lg font-semibold">Supply usage by location</h4>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="usage-filter">Show locations</Label>
@@ -475,9 +511,11 @@ export function AdminDashboard({ onLocationPublished }: Props) {
             </tbody>
           </table>
         </div>
-      </section>
+          </section>
+        </TabsContent>
 
-      <section className="space-y-3">
+        <TabsContent value="history" className="mt-0">
+          <section className="space-y-3">
         <h3 className="text-xl font-semibold">Resolved restock history</h3>
         {!resolved.length ? (
           <p className="rounded-lg border p-4 text-sm text-muted-foreground">
@@ -501,7 +539,9 @@ export function AdminDashboard({ onLocationPublished }: Props) {
             ))}
           </div>
         )}
-      </section>
+          </section>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
