@@ -63,10 +63,12 @@ node -e 'const c=require("node:crypto"),s=c.randomBytes(16),h=c.scryptSync(proce
 unset ADMIN_PASSWORD
 ```
 
-Save the printed hash as `ADMIN_PASSWORD_HASH` in Vercel. Generate
-`ADMIN_SESSION_SECRET` with `openssl rand -base64 48`. Add both variables to
-Production, Preview, and Development, then pull Development variables again
-with `npx vercel env pull .env.local --yes`.
+Save the printed hash as `ADMIN_PASSWORD_HASH` in `.env.local` and as a
+Vercel **Secret**. Generate `ADMIN_SESSION_SECRET` with
+`openssl rand -base64 48` and save it in both places as well. Add the Vercel
+Secrets to Production, Preview, and Development. Vercel Secrets cannot be
+pulled back down later, so retain the local values securely; `.env.local` is
+gitignored.
 
 ## Deploy
 
