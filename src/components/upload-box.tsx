@@ -75,7 +75,6 @@ export function UploadBox({ locations }: Props) {
   const [contactEmail, setContactEmail] = useState("");
   const [is247, setIs247] = useState("yes");
   const [hasNaloxone, setHasNaloxone] = useState("yes");
-  const [hasStrips, setHasStrips] = useState("no");
   const [type, setType] = useState(types[0] ?? "V");
   const [files, setFiles] = useState<File[]>([]);
   const [status, setStatus] = useState<"idle" | "saving" | "success" | "error">(
@@ -139,7 +138,7 @@ export function UploadBox({ locations }: Props) {
       form.set("longitude", longitude);
       form.set("is_24_7", is247);
       form.set("has_naloxone", hasNaloxone);
-      form.set("has_fent_strips", hasStrips);
+      form.set("has_fent_strips", "no");
       form.set("type", type);
       form.set("contact_phone", contactPhone);
       form.set("contact_email", contactEmail);
@@ -180,7 +179,7 @@ export function UploadBox({ locations }: Props) {
           Add a distribution box
         </h2>
         <p className="mt-2 text-base text-muted-foreground">
-          Share a naloxone or fentanyl test strip box so others can find it.
+          Share a naloxone distribution box so others can find it.
         </p>
       </div>
 
@@ -283,12 +282,6 @@ export function UploadBox({ locations }: Props) {
         label="Has naloxone?"
         value={hasNaloxone}
         onChange={setHasNaloxone}
-      />
-      <YesNo
-        id="strips"
-        label="Has fentanyl test strips?"
-        value={hasStrips}
-        onChange={setHasStrips}
       />
 
       <div className="space-y-2">

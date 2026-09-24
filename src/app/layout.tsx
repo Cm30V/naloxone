@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Georgia Naloxone Locator",
+  title: "Naloxone Locator",
   description:
-    "Find the nearest Georgia naloxone or fentanyl test strip distribution box, or submit a new location.",
+    "Find nearby Georgia naloxone distribution boxes, or submit a new location.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

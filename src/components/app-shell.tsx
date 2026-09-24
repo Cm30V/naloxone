@@ -41,10 +41,7 @@ export function AppShell() {
   return (
     <div className="flex min-h-dvh flex-col bg-background">
       <header className="border-b px-4 py-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Georgia prototype
-        </p>
-        <h1 className="text-xl font-semibold">Naloxone & fentanyl strip locator</h1>
+        <h1 className="text-xl font-semibold">Naloxone locator</h1>
       </header>
 
       {loadError ? (
