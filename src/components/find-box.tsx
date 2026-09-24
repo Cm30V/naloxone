@@ -33,17 +33,38 @@ type Props = {
   locations: Location[];
 };
 
+type Coords = { lat: number; lng: number };
+
+function closestLocation(from: Coords, locations: Location[]): Location | null {
+  if (!locations.length) return null;
+  let best = locations[0];
+  let bestKm = haversineKm(
+    from.lat,
+    from.lng,
+    best.latitude,
+    best.longitude,
+  );
+  for (let i = 1; i < locations.length; i++) {
+    const loc = locations[i];
+    const km = haversineKm(from.lat, from.lng, loc.latitude, loc.longitude);
+    if (km < bestKm) {
+      best = loc;
+      bestKm = km;
+    }
+  }
+  return best;
+}
+
 export function FindBox({ locations }: Props) {
   const [needNaloxone, setNeedNaloxone] = useState(false);
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
-    null,
-  );
+  const [coords, setCoords] = useState<Coords | null>(null);
   const [geoStatus, setGeoStatus] = useState<
     "idle" | "requesting" | "granted" | "denied" | "unavailable"
   >("idle");
   const [geoError, setGeoError] = useState<string | null>(null);
   const [manualQuery, setManualQuery] = useState("");
   const [geocoding, setGeocoding] = useState(false);
+  const [findingClosest, setFindingClosest] = useState(false);
   const [selected, setSelected] = useState<Location | null>(null);
 
   useEffect(() => {
@@ -96,31 +117,69 @@ export function FindBox({ locations }: Props) {
     };
   }, [selected, coords]);
 
+  function readDeviceLocation(): Promise<Coords> {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(
+          new Error(
+            "This browser does not support location. Enter a ZIP instead.",
+          ),
+        );
+        return;
+      }
+      setGeoStatus("requesting");
+      setGeoError(null);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const next = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          };
+          setCoords(next);
+          setGeoStatus("granted");
+          resolve(next);
+        },
+        (err) => {
+          const denied = err.code === err.PERMISSION_DENIED;
+          setGeoStatus(denied ? "denied" : "unavailable");
+          const message = denied
+            ? "Location permission was denied. Enter a Georgia ZIP or address below."
+            : "Could not read your location. Enter a Georgia ZIP or address below.";
+          setGeoError(message);
+          reject(new Error(message));
+        },
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
+      );
+    });
+  }
+
   function requestLocation() {
-    if (!navigator.geolocation) {
-      setGeoStatus("unavailable");
-      setGeoError("This browser does not support location. Enter a ZIP instead.");
+    void readDeviceLocation().catch(() => {
+      /* geoError already set */
+    });
+  }
+
+  async function findClosest() {
+    if (!visibleLocations.length) {
+      setGeoError("No sites match the current filters.");
       return;
     }
-    setGeoStatus("requesting");
+
+    setFindingClosest(true);
     setGeoError(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setGeoStatus("granted");
-      },
-      (err) => {
-        setGeoStatus(
-          err.code === err.PERMISSION_DENIED ? "denied" : "unavailable",
-        );
-        setGeoError(
-          err.code === err.PERMISSION_DENIED
-            ? "Location permission was denied. Enter a Georgia ZIP or address below."
-            : "Could not read your location. Enter a Georgia ZIP or address below.",
-        );
-      },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
-    );
+    try {
+      const from = coords ?? (await readDeviceLocation());
+      const nearest = closestLocation(from, visibleLocations);
+      if (!nearest) {
+        setGeoError("No sites match the current filters.");
+        return;
+      }
+      setSelected(nearest);
+    } catch {
+      /* geoError already set */
+    } finally {
+      setFindingClosest(false);
+    }
   }
 
   async function geocodeManual(e: React.FormEvent) {
@@ -249,6 +308,16 @@ export function FindBox({ locations }: Props) {
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
+            className="h-11"
+            onClick={() => void findClosest()}
+            disabled={findingClosest || geoStatus === "requesting"}
+          >
+            {findingClosest || (geoStatus === "requesting" && !coords)
+              ? "Finding closest…"
+              : "Find closest to me"}
+          </Button>
+          <Button
+            type="button"
             variant="secondary"
             className="h-11"
             onClick={requestLocation}
@@ -301,7 +370,7 @@ export function FindBox({ locations }: Props) {
         </p>
       </div>
 
-      <div className="relative min-h-[55dvh] flex-1">
+      <div className="relative min-h-[55dvh] flex-1 touch-manipulation">
         <div className="absolute inset-0">
           <GeorgiaMap
             locations={visibleLocations}

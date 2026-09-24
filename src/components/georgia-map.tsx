@@ -4,10 +4,10 @@ import { useEffect, useMemo } from "react";
 import {
   CircleMarker,
   MapContainer,
-  Marker,
   TileLayer,
   Tooltip,
   useMap,
+  useMapEvents,
 } from "react-leaflet";
 import L from "leaflet";
 import type { Location } from "@/lib/types";
@@ -19,22 +19,15 @@ const GA_BOUNDS = L.latLngBounds(
   L.latLng(35.2, -80.7),
 );
 
+/** Screen-pixel radius for map taps to count as selecting a site (phones). */
+const TAP_HIT_PX = 44;
+
 type Props = {
   locations: Location[];
   userCoords: { lat: number; lng: number } | null;
   selectedId: string | null;
   onSelect: (location: Location) => void;
 };
-
-function siteIcon(selected: boolean) {
-  const color = selected ? "#2563eb" : "#dc2626";
-  return L.divIcon({
-    className: "",
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-    html: `<span style="display:block;width:28px;height:28px;border-radius:9999px;background:${color};border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45);"></span>`,
-  });
-}
 
 function FitGeorgia({
   locations,
@@ -73,6 +66,45 @@ function FitGeorgia({
   return null;
 }
 
+function nearestLocation(
+  map: L.Map,
+  point: L.Point,
+  locations: Location[],
+  maxPx: number,
+): Location | null {
+  let best: Location | null = null;
+  let bestDist = maxPx;
+  for (const loc of locations) {
+    const markerPoint = map.latLngToContainerPoint([
+      loc.latitude,
+      loc.longitude,
+    ]);
+    const dist = markerPoint.distanceTo(point);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = loc;
+    }
+  }
+  return best;
+}
+
+/** Map-level tap fallback — more reliable on phones than marker-only hits. */
+function TapToSelect({
+  locations,
+  onSelect,
+}: {
+  locations: Location[];
+  onSelect: (location: Location) => void;
+}) {
+  const map = useMapEvents({
+    click(e) {
+      const hit = nearestLocation(map, e.containerPoint, locations, TAP_HIT_PX);
+      if (hit) onSelect(hit);
+    },
+  });
+  return null;
+}
+
 export function GeorgiaMap({
   locations,
   userCoords,
@@ -88,25 +120,28 @@ export function GeorgiaMap({
       minZoom={6}
       maxZoom={16}
       scrollWheelZoom
-      className="z-0 h-full w-full"
-      style={{ height: "100%", width: "100%" }}
+      tapTolerance={28}
+      className="z-0 h-full w-full touch-manipulation"
+      style={{ height: "100%", width: "100%", touchAction: "pan-x pan-y" }}
     >
       <TileLayer
         attribution='Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom'
         url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
       />
       <FitGeorgia locations={markers} userCoords={userCoords} />
+      <TapToSelect locations={markers} onSelect={onSelect} />
 
       {userCoords ? (
         <CircleMarker
           center={[userCoords.lat, userCoords.lng]}
-          radius={9}
+          radius={10}
           pathOptions={{
             color: "#fff",
             weight: 2,
             fillColor: "#0ea5e9",
             fillOpacity: 1,
           }}
+          interactive={false}
         >
           <Tooltip direction="top" offset={[0, -8]} permanent={false}>
             Your location
@@ -114,20 +149,33 @@ export function GeorgiaMap({
         </CircleMarker>
       ) : null}
 
-      {markers.map((loc) => (
-        <Marker
-          key={loc.id}
-          position={[loc.latitude, loc.longitude]}
-          icon={siteIcon(loc.id === selectedId)}
-          eventHandlers={{
-            click: () => onSelect(loc),
-          }}
-        >
-          <Tooltip direction="top" offset={[0, -12]}>
-            {loc.name}
-          </Tooltip>
-        </Marker>
-      ))}
+      {markers.map((loc) => {
+        const selected = loc.id === selectedId;
+        return (
+          <CircleMarker
+            key={loc.id}
+            center={[loc.latitude, loc.longitude]}
+            radius={selected ? 14 : 12}
+            pathOptions={{
+              color: "#fff",
+              weight: 3,
+              fillColor: selected ? "#2563eb" : "#dc2626",
+              fillOpacity: 1,
+              // Keep marker taps from also firing map click (cleaner on phones)
+              bubblingMouseEvents: false,
+            }}
+            eventHandlers={{
+              click: () => {
+                onSelect(loc);
+              },
+            }}
+          >
+            <Tooltip direction="top" offset={[0, -12]} interactive={false}>
+              {loc.name}
+            </Tooltip>
+          </CircleMarker>
+        );
+      })}
     </MapContainer>
   );
 }
