@@ -96,6 +96,16 @@ export function AppShell() {
           />
         </TabsContent>
       </Tabs>
+
+      <footer className="border-t px-4 py-5 text-sm text-muted-foreground">
+        <p className="font-medium text-foreground">Credits</p>
+        <p className="mt-2 max-w-2xl leading-relaxed">
+          All informational content, resources, and naloxone distribution
+          information presented on this website belong to or were provided by
+          Georgia Overdose Prevention.
+        </p>
+        <p className="mt-2">Website design and development by Charlie Mei.</p>
+      </footer>
     </div>
   );
 }

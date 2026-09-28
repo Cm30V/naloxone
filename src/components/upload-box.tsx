@@ -181,6 +181,16 @@ export function UploadBox({ locations }: Props) {
         <p className="mt-2 text-base text-muted-foreground">
           Share a naloxone distribution box so others can find it.
         </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          After you submit, please email{" "}
+          <a
+            href="mailto:nursegish@gmail.com"
+            className="font-medium text-foreground underline underline-offset-4"
+          >
+            nursegish@gmail.com
+          </a>{" "}
+          to let us know you added a box.
+        </p>
       </div>
 
       <div className="space-y-2">
